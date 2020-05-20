@@ -1,0 +1,11 @@
+{
+  "name": "cloud-comp-a2-backend",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node /src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "express": "^4.17.1"
+  }
+}
