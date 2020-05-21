@@ -35,8 +35,8 @@ async function createUser(firstname, lastname, email, password) {
 }
 
 app.get('/', (req, res) => {
-  res.send('Hello from App Engine!');
-  res.status(200);
+    res.status(200);
+    res.send('Hello from App Engine!');
 });
 
 app.get('/login', (req, res) => {
@@ -44,27 +44,33 @@ app.get('/login', (req, res) => {
     const password = req.query.password;
     retrieveUser(email, password).then((user) => {
         if (user != null) {
-            res.json(user);
+            const userData = {
+                email: user.email,
+                firstname: user.firstname,
+                lastname: user.lastname,
+                id: user[Datastore.KEY].id,
+            }
             res.status(200);
+            res.json(userData);
         }
         else {
-            res.send("User not found !")
             res.status(401);
+            res.send("User not found !")
         }    
     });
 });
 
-app.post('/signin', (req, res) => {
+app.post('/signup', (req, res) => {
     const firstname = req.query.firstname;
     const lastname = req.query.lastname;
     const email = req.query.email;
     const password = req.query.password;
     createUser(firstname, lastname, email, password).then(() => {
-        res.send("Success");
         res.status(200);
+        res.send("Success");
     }, () => {
-        res.send("Failure");
         res.status(500);
+        res.send("Failure");
     });
 });
 
