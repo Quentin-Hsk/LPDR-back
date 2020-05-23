@@ -8,19 +8,18 @@ app.use(cors());
 
 
 const datastore = new Datastore();
-const kind = 'user';
 
 async function retrieveUser(email, password) {
     const passwdHash = crypto.createHash('sha256').update(password).digest('hex')
-    const query = datastore.createQuery(kind)
+    const query = datastore.createQuery('user')
         .filter('email', '=', email )
         .filter('password', '=', passwdHash);
     const users = await datastore.runQuery(query);
     return users[0][0];
-}
+};
 
 async function createUser(firstname, lastname, email, password) {
-    const userKey = datastore.key(kind);
+    const userKey = datastore.key('user');
     const user = {
         firstname,
         lastname,
@@ -32,7 +31,29 @@ async function createUser(firstname, lastname, email, password) {
         data: user, 
     }
     await datastore.insert(entity);
-}
+};
+
+async function retrieveTimeline(userId) {
+    const ancestoreKey = datastore.key(['user', userId]);
+    const query = datastore.createQuery('timeline')
+        .limit(5)
+        .hasAncestor(ancestoreKey);
+    const history = await datastore.runQuery(query);
+    return history[0];
+};
+
+async function addTimeline(userId, origin, destination) {
+    const timelineKey = datastore.key(['user', userId, 'timeline']);
+    const timeline = {
+        origin,
+        destination,
+    }
+    const entity = {
+        key: timelineKey,
+        data: timeline,
+    }
+    await datastore.insert(entity);
+};
 
 app.get('/', (req, res) => {
     res.status(200);
@@ -68,9 +89,37 @@ app.post('/signup', (req, res) => {
     createUser(firstname, lastname, email, password).then(() => {
         res.status(200);
         res.send("Success");
+    }, (resp) => {
+        console.log(resp);
+        res.status(500);
+        res.send("Failure");
+    });
+});
+
+app.post('/addTimeline', (req, res) => {
+    const userId = parseInt(req.query.userId);
+    const origin = req.query.origin;
+    const destination = req.query.destination;
+    addTimeline(userId, origin, destination).then(() => {
+        res.status(200);
+        res.send("Success");
     }, () => {
         res.status(500);
         res.send("Failure");
+    });
+});
+
+app.get('/getTimeline', (req, res) => {
+    const userId = parseInt(req.query.userId);
+    retrieveTimeline(userId).then((timelines) => {
+        if (timelines != null) {
+            res.status(200);
+            res.json(timelines);
+        }
+        else {
+            res.status(401);
+            res.send("Timelines not found !")
+        }    
     });
 });
 
