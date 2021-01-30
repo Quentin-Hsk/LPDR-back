@@ -1,5 +1,5 @@
 {
-  "name": "cloud-comp-a2-backend",
+  "name": "lpdr-backend",
   "version": "1.0.0",
   "scripts": {
     "start": "node src/index.js",

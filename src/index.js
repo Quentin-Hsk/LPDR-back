@@ -1,126 +1,173 @@
-const express = require('express');
+const express = require("express");
 const app = express();
-const {Datastore} = require('@google-cloud/datastore');
-const cors = require('cors');
-const crypto = require('crypto');
+const { Datastore } = require("@google-cloud/datastore");
+const cors = require("cors");
+const crypto = require("crypto");
+const bodyParser = require("body-parser");
 
 app.use(cors());
-
+app.use(bodyParser.json());
 
 const datastore = new Datastore();
 
 async function retrieveUser(email, password) {
-    const passwdHash = crypto.createHash('sha256').update(password).digest('hex')
-    const query = datastore.createQuery('user')
-        .filter('email', '=', email )
-        .filter('password', '=', passwdHash);
-    const users = await datastore.runQuery(query);
-    return users[0][0];
-};
+  const passwdHash = crypto.createHash("sha256").update(password).digest("hex");
+  const query = datastore
+    .createQuery("user")
+    .filter("email", "=", email)
+    .filter("password", "=", passwdHash);
+  const users = await datastore.runQuery(query);
+  return users[0][0];
+}
 
-async function createUser(firstname, lastname, email, password) {
-    const userKey = datastore.key('user');
-    const user = {
-        firstname,
-        lastname,
-        email,
-        password: crypto.createHash('sha256').update(password).digest('hex'),
-    }
-    const entity = {
-        key: userKey,
-        data: user, 
-    }
-    await datastore.insert(entity);
-};
+async function createUser(user) {
+  const userKey = datastore.key("user");
+  user.password = crypto
+    .createHash("sha256")
+    .update(user.password)
+    .digest("hex");
+  const entity = {
+    key: userKey,
+    data: user,
+  };
+  await datastore.insert(entity);
+}
 
-async function retrieveTimeline(userId) {
-    const ancestoreKey = datastore.key(['user', userId]);
-    const query = datastore.createQuery('timeline')
-        .limit(5)
-        .hasAncestor(ancestoreKey);
-    const history = await datastore.runQuery(query);
-    return history[0];
-};
+async function addArtwork(artwork) {
+  const artworkKey = datastore.key("artwork");
+  const entity = {
+    key: artworkKey,
+    data: artwork,
+  };
+  await datastore.insert(entity);
+}
 
-async function addTimeline(userId, origin, destination) {
-    const timelineKey = datastore.key(['user', userId, 'timeline']);
-    const timeline = {
-        origin,
-        destination,
-    }
-    const entity = {
-        key: timelineKey,
-        data: timeline,
-    }
-    await datastore.insert(entity);
-};
+async function editArtwork(artwork) {
+  const artworkKey = datastore.key("artwork", artwork.id);
+  const DSartwork = {
+    movement: artwork.movement,
+    title: artwork.title,
+    author: artwork.author,
+    creation: artwork.creation,
+    lastEdit: artwork.lastEdit,
+    tags: artwork.tags,
+    description: artwork.description,
+    image: artwork.image,
+  };
+  const entity = {
+    key: artworkKey,
+    data: DSartwork,
+  };
+  await datastore.put(entity);
+}
 
-app.get('/', (req, res) => {
-    res.status(200);
-    res.send('Hello from App Engine!');
+async function retrieveArtwork(tags) {
+  let query;
+  if (tags !== null) {
+    query = datastore
+      .createQuery("artwork")
+      .filter("tags", "=", tags)
+      .order("lastEdit", {
+        descending: true,
+      });
+  } else {
+    query = datastore.createQuery("artwork").order("lastEdit", {
+      descending: true,
+    });
+  }
+  const artworks = await datastore.runQuery(query);
+  return artworks[0];
+}
+
+app.get("/", (req, res) => {
+  res.status(200);
+  res.send("Hello from App Engine!");
 });
 
-app.get('/login', (req, res) => {
-    const email = req.query.email;
-    const password = req.query.password;
-    retrieveUser(email, password).then((user) => {
-        if (user != null) {
-            const userData = {
-                email: user.email,
-                firstname: user.firstname,
-                lastname: user.lastname,
-                id: user[Datastore.KEY].id,
-            }
-            res.status(200);
-            res.json(userData);
+app.get("/login", (req, res) => {
+  const email = req.query.email;
+  const password = req.query.password;
+  retrieveUser(email, password).then((user) => {
+    if (user != null) {
+      const userData = {
+        username: user.username,
+        email: user.email,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        id: user[Datastore.KEY].id,
+      };
+      res.status(200);
+      res.json(userData);
+    } else {
+      res.status(401);
+      res.send("User not found !");
+    }
+  });
+});
+
+app.post("/signup", (req, res) => {
+  const user = req.body;
+  createUser(user).then(
+    () => {
+      res.status(200);
+      res.send("Success");
+    },
+    (resp) => {
+      console.log(resp);
+      res.status(500);
+      res.send("Failure");
+    }
+  );
+});
+
+app.post("/addArtwork", (req, res) => {
+  const artwork = req.body;
+  addArtwork(artwork).then(
+    () => {
+      res.status(200);
+      res.send("Success");
+    },
+    () => {
+      res.status(500);
+      res.send("Failure");
+    }
+  );
+});
+
+app.post("/editArtwork", (req, res) => {
+  const artwork = req.body;
+  editArtwork(artwork).then(
+    () => {
+      res.status(200);
+      res.send("Success");
+    },
+    () => {
+      res.status(500);
+      res.send("Failure");
+    }
+  );
+});
+
+app.get("/searchArtwork", (req, res) => {
+  const search = req.query.search ? req.query.search : null;
+  retrieveArtwork(search).then(
+    (artworks) => {
+        if (artworks !== null) {
+            artworks = artworks.map(art => ({ ...art, id: art[Datastore.KEY].id,
+            }));
+            res.status(200);      
+            res.json(artworks);
         }
         else {
             res.status(401);
-            res.send("User not found !")
+            res.send("Artworks not found !")
         }    
-    });
-});
-
-app.post('/signup', (req, res) => {
-    const firstname = req.query.firstname;
-    const lastname = req.query.lastname;
-    const email = req.query.email;
-    const password = req.query.password;
-    createUser(firstname, lastname, email, password).then(() => {
-        res.status(200);
-        res.send("Success");
-    }, (resp) => {
-        console.log(resp);
-        res.status(500);
-        res.send("Failure");
-    });
-});
-
-app.post('/addTimeline', (req, res) => {
-    const userId = parseInt(req.query.userId);
-    const origin = req.query.origin;
-    const destination = req.query.destination;
-    addTimeline(userId, origin, destination).then(() => {
-        res.status(200);
-        res.send("Success");
-    }, () => {
-        res.status(500);
-        res.send("Failure");
-    });
-});
-
-app.get('/getTimeline', (req, res) => {
-    const userId = parseInt(req.query.userId);
-    retrieveTimeline(userId).then((timelines) => {
-        if (timelines != null) {
-            res.status(200);
-            res.json(timelines);
-        }
-        else {
-            res.status(401);
-            res.send("Timelines not found !")
-        }    
-    });
+    },
+    () => {
+      res.status(500);
+      res.send("Failure");
+    }
+  );
 });
 
 // Listen to the App Engine-specified port, or 8080 otherwise
