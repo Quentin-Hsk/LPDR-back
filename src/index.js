@@ -1,14 +1,22 @@
 const express = require("express");
 const app = express();
 const { Datastore } = require("@google-cloud/datastore");
+const { Storage } = require("@google-cloud/storage");
 const cors = require("cors");
 const crypto = require("crypto");
 const bodyParser = require("body-parser");
+const {format} = require("util");
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({
+  extended: true,
+  limit: '50mb'
+}));
 
 const datastore = new Datastore();
+const storage = new Storage();
+
+const bucket = storage.bucket("lpdr_avatar_bucket");
 
 async function retrieveUser(email, password) {
   const passwdHash = crypto.createHash("sha256").update(password).digest("hex");
@@ -43,7 +51,7 @@ async function addArtwork(artwork) {
 }
 
 async function editArtwork(artwork) {
-  const artworkKey = datastore.key("artwork", artwork.id);
+  const artworkKey = datastore.key(["artwork", datastore.int(artwork.id)]);
   const DSartwork = {
     movement: artwork.movement,
     title: artwork.title,
@@ -58,7 +66,7 @@ async function editArtwork(artwork) {
     key: artworkKey,
     data: DSartwork,
   };
-  await datastore.put(entity);
+  await datastore.update(entity);
 }
 
 async function retrieveArtwork(tags) {
@@ -90,6 +98,7 @@ app.get("/login", (req, res) => {
   retrieveUser(email, password).then((user) => {
     if (user != null) {
       const userData = {
+        avatar: user.avatar,
         username: user.username,
         email: user.email,
         firstname: user.firstname,
@@ -106,7 +115,20 @@ app.get("/login", (req, res) => {
 });
 
 app.post("/signup", (req, res) => {
-  const user = req.body;
+  let avatar = '';
+  
+  if (req.body.avatar) {
+    const file = bucket.file(req.body.username + "-avatar.jpg");
+    file.save(req.body.avatar, function(err) {
+      if (!err) {
+        // File written successfully.
+        avatar = file.publicUrl();
+      }
+    });
+   
+  }
+
+  const user = {...req.body, avatar};
   createUser(user).then(
     () => {
       res.status(200);
@@ -141,9 +163,9 @@ app.post("/editArtwork", (req, res) => {
       res.status(200);
       res.send("Success");
     },
-    () => {
+    (resp) => {
       res.status(500);
-      res.send("Failure");
+      res.send(resp);
     }
   );
 });
